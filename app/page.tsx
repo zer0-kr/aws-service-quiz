@@ -1,18 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 
 export default function LandingPage() {
   const supabase = createClient();
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    setLoginError(null);
+    setLoading(true);
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+    } catch {
+      setLoginError("Failed to connect to Google. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -53,7 +63,8 @@ export default function LandingPage() {
         <div className="space-y-4 fade-in" style={{ animationDelay: "0.2s" }}>
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 rounded-xl bg-white text-gray-900 font-semibold px-6 py-4 hover:bg-gray-100 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 rounded-xl bg-white text-gray-900 font-semibold px-6 py-4 hover:bg-gray-100 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -61,8 +72,11 @@ export default function LandingPage() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
-            Sign in with Google
+            {loading ? "Connecting..." : "Sign in with Google"}
           </button>
+          {loginError && (
+            <p className="text-sm text-red-400 text-center">{loginError}</p>
+          )}
           <Link href="/leaderboard" className="block text-sm text-gray-500 hover:text-[#ff9900] transition-colors">
             View Leaderboard &rarr;
           </Link>

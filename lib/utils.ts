@@ -28,9 +28,8 @@ export function shuffleArray<T>(array: T[]): T[] {
 
 export function getKSTDate(): Date {
   const now = new Date();
-  const kstOffset = 9 * 60;
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-  return new Date(utcMs + kstOffset * 60000);
+  const kstOffset = 9 * 60 * 60 * 1000;
+  return new Date(now.getTime() + kstOffset);
 }
 
 export function getKSTDateString(): string {

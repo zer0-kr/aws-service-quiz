@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateQuestions } from "@/lib/game/questions";
-import { MAX_DAILY_ATTEMPTS } from "@/lib/utils";
+import { MAX_DAILY_ATTEMPTS, TOTAL_QUESTIONS } from "@/lib/utils";
 
 export async function startGame() {
   const supabase = await createClient();
@@ -71,6 +71,15 @@ export async function completeGame(
   sessionId: string,
   answers: number[]
 ) {
+  // Validate answers array
+  if (
+    !Array.isArray(answers) ||
+    answers.length !== TOTAL_QUESTIONS ||
+    !answers.every((a) => typeof a === "number" && Number.isInteger(a) && a >= 0 && a <= 3)
+  ) {
+    return { error: "Invalid answers" };
+  }
+
   const supabase = await createClient();
   const admin = createAdminClient();
 
@@ -179,6 +188,7 @@ export async function getMyRecords() {
   const { data } = await supabase
     .from("game_sessions")
     .select("*")
+    .eq("user_id", user.id)
     .eq("status", "completed")
     .order("final_time_ms", { ascending: true })
     .limit(10);

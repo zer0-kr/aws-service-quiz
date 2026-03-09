@@ -41,8 +41,9 @@ export default function SetupPage() {
               minLength={2}
               maxLength={20}
               required
-              className="w-full px-5 py-4 rounded-xl bg-[#12121a] border border-[#1e1e2e] text-white placeholder-gray-500 focus:outline-none focus:border-[#ff9900]/50 focus:ring-1 focus:ring-[#ff9900]/30 transition-all text-lg"
+              className="w-full px-5 py-4 rounded-xl bg-[#12121a] border border-[#1e1e2e] text-white placeholder-gray-500 focus:outline-none focus:border-[#ff9900]/50 focus:ring-1 focus:ring-[#ff9900]/30 transition-all text-lg disabled:opacity-60"
               autoFocus
+              disabled={loading}
             />
             {error && (
               <p className="mt-2 text-sm text-red-400 flex items-center gap-1">

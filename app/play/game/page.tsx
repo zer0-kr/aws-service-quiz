@@ -22,6 +22,7 @@ function GameContent() {
   const [loading, setLoading] = useState(true);
   const [penaltyFlash, setPenaltyFlash] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef<number[]>([]);
@@ -43,25 +44,29 @@ function GameContent() {
     }
 
     async function loadSession() {
-      const supabase = createClient();
-      const { data: session } = await supabase
-        .from("game_sessions")
-        .select("*")
-        .eq("id", sessionId)
-        .single();
+      try {
+        const supabase = createClient();
+        const { data: session } = await supabase
+          .from("game_sessions")
+          .select("*")
+          .eq("id", sessionId)
+          .single();
 
-      if (!session || session.status !== "playing") {
+        if (!session || session.status !== "playing") {
+          router.push("/play");
+          return;
+        }
+
+        const qs = session.questions as QuizQuestion[];
+        setQuestions(qs);
+        startTimeRef.current = Date.now();
+        setLoading(false);
+
+        // Preload first 3 question icons
+        qs.slice(0, 3).forEach((q) => preloadImage(q.iconUrl));
+      } catch {
         router.push("/play");
-        return;
       }
-
-      const qs = session.questions as QuizQuestion[];
-      setQuestions(qs);
-      startTimeRef.current = Date.now();
-      setLoading(false);
-
-      // Preload first 3 question icons
-      qs.slice(0, 3).forEach((q) => preloadImage(q.iconUrl));
     }
 
     loadSession();
@@ -87,7 +92,7 @@ function GameContent() {
 
     timerRef.current = setInterval(() => {
       setElapsedMs(Date.now() - startTimeRef.current);
-    }, 10);
+    }, 100);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -128,6 +133,12 @@ function GameContent() {
             answersRef.current
           );
 
+
+          if (result.error) {
+            setSubmitError(result.error);
+            return;
+          }
+
           if (result.session) {
             const s = result.session;
             router.replace(
@@ -146,7 +157,7 @@ function GameContent() {
         }
       }, delay);
     },
-    [answerState, currentIndex, gameOver, transitioning, questions, penaltyCount, sessionId, router]
+    [answerState, currentIndex, gameOver, transitioning, questions, sessionId, router]
   );
 
   if (loading) {
@@ -155,6 +166,23 @@ function GameContent() {
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-4 border-[#ff9900] border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-gray-400">Loading quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameOver && submitError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="glass-card rounded-2xl p-8 text-center space-y-4 max-w-md">
+          <div className="text-red-400 text-lg font-semibold">Something went wrong</div>
+          <p className="text-gray-400 text-sm">{submitError}</p>
+          <button
+            onClick={() => router.push("/play")}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#ff9900] to-[#cc7a00] text-white font-bold hover:from-[#ffad33] hover:to-[#ff9900] transition-all duration-200"
+          >
+            Return to Menu
+          </button>
         </div>
       </div>
     );
@@ -199,7 +227,7 @@ function GameContent() {
         {/* Question Card — key forces re-mount for consistent animation */}
         <div
           key={currentIndex}
-          className={`glass-card rounded-2xl p-8 text-center space-y-8 transition-opacity duration-150 ${
+          className={`glass-card rounded-2xl p-8 text-center space-y-8 min-h-[420px] transition-opacity duration-150 ${
             transitioning ? "opacity-0 scale-95" : "opacity-100 scale-100"
           }`}
           style={{ transition: "opacity 150ms ease, transform 150ms ease" }}
