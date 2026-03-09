@@ -37,7 +37,7 @@ export function getKSTDateString(): string {
   return kst.toISOString().split("T")[0];
 }
 
-export const PENALTY_MS = 5000;
+export const PENALTY_MS = 10000;
 export const TOTAL_QUESTIONS = 15;
 export const MAX_DAILY_ATTEMPTS = 3;
 export const ICON_CDN_BASE =

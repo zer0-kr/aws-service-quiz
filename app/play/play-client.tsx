@@ -88,7 +88,7 @@ export default function PlayClient({
             <p className="text-gray-400">
               Identify 15 AWS service icons as fast as you can.
               <br />
-              Wrong answers add +5s penalty to your time.
+              Wrong answers add +10s penalty to your time.
             </p>
           </div>
 
@@ -104,7 +104,7 @@ export default function PlayClient({
               <div className="text-xs text-gray-500">Questions</div>
             </div>
             <div className="bg-[#0a0a0f] rounded-xl p-4">
-              <div className="text-2xl font-bold">+5s</div>
+              <div className="text-2xl font-bold">+10s</div>
               <div className="text-xs text-gray-500">Penalty</div>
             </div>
           </div>

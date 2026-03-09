@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateQuestions } from "@/lib/game/questions";
-import { MAX_DAILY_ATTEMPTS, TOTAL_QUESTIONS } from "@/lib/utils";
+import { MAX_DAILY_ATTEMPTS, TOTAL_QUESTIONS, PENALTY_MS } from "@/lib/utils";
 
 export async function startGame() {
   const supabase = await createClient();
@@ -120,7 +120,7 @@ export async function completeGame(
   const completedAt = new Date();
   const startedAt = new Date(session.started_at);
   const totalTimeMs = completedAt.getTime() - startedAt.getTime();
-  const penaltyMs = penaltyCount * 5000;
+  const penaltyMs = penaltyCount * PENALTY_MS;
   const finalTimeMs = totalTimeMs + penaltyMs;
 
   const { data: updated, error } = await admin
