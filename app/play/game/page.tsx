@@ -21,9 +21,19 @@ function GameContent() {
   const [gameOver, setGameOver] = useState(false);
   const [loading, setLoading] = useState(true);
   const [penaltyFlash, setPenaltyFlash] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef<number[]>([]);
+  const preloadedImages = useRef<Set<string>>(new Set());
+
+  // Preload an image and return a promise
+  const preloadImage = useCallback((url: string) => {
+    if (preloadedImages.current.has(url)) return;
+    preloadedImages.current.add(url);
+    const img = new Image();
+    img.src = url;
+  }, []);
 
   // Load game session
   useEffect(() => {
@@ -45,13 +55,31 @@ function GameContent() {
         return;
       }
 
-      setQuestions(session.questions as QuizQuestion[]);
+      const qs = session.questions as QuizQuestion[];
+      setQuestions(qs);
       startTimeRef.current = Date.now();
       setLoading(false);
+
+      // Preload first 3 question icons
+      qs.slice(0, 3).forEach((q) => preloadImage(q.iconUrl));
     }
 
     loadSession();
-  }, [sessionId, router]);
+  }, [sessionId, router, preloadImage]);
+
+  // Preload upcoming question icons when currentIndex changes
+  useEffect(() => {
+    if (questions.length === 0) return;
+    // Preload next 2 icons ahead
+    for (let i = currentIndex + 1; i <= Math.min(currentIndex + 2, questions.length - 1); i++) {
+      preloadImage(questions[i].iconUrl);
+    }
+  }, [currentIndex, questions, preloadImage]);
+
+  // Prefetch result page for fast transition at game end
+  useEffect(() => {
+    router.prefetch("/play/result");
+  }, [router]);
 
   // Timer
   useEffect(() => {
@@ -68,7 +96,7 @@ function GameContent() {
 
   const handleAnswer = useCallback(
     (choiceIndex: number) => {
-      if (answerState !== "idle" || gameOver) return;
+      if (answerState !== "idle" || gameOver || transitioning) return;
 
       const question = questions[currentIndex];
       const isCorrect = choiceIndex === question.correctIndex;
@@ -86,6 +114,7 @@ function GameContent() {
       }
 
       // Move to next question after delay
+      const delay = isCorrect ? 400 : 800;
       setTimeout(async () => {
         const nextIndex = currentIndex + 1;
 
@@ -94,9 +123,6 @@ function GameContent() {
           setGameOver(true);
           if (timerRef.current) clearInterval(timerRef.current);
 
-          const finalElapsed = Date.now() - startTimeRef.current;
-          const currentPenaltyCount = penaltyCount + (isCorrect ? 0 : 1);
-
           const result = await completeGame(
             sessionId!,
             answersRef.current
@@ -104,18 +130,23 @@ function GameContent() {
 
           if (result.session) {
             const s = result.session;
-            router.push(
-              `/play/result?id=${sessionId}&time=${s.total_time_ms}&penalties=${s.penalty_count}&final=${s.final_time_ms}`
+            router.replace(
+              `/play/result?id=${sessionId}&time=${s.total_time_ms}&penalties=${s.penalty_count}&correct=${s.correct_count}&final=${s.final_time_ms}`
             );
           }
         } else {
-          setCurrentIndex(nextIndex);
-          setSelectedAnswer(null);
-          setAnswerState("idle");
+          // Transition: fade out, swap, fade in
+          setTransitioning(true);
+          setTimeout(() => {
+            setCurrentIndex(nextIndex);
+            setSelectedAnswer(null);
+            setAnswerState("idle");
+            setTransitioning(false);
+          }, 150);
         }
-      }, isCorrect ? 400 : 800);
+      }, delay);
     },
-    [answerState, currentIndex, gameOver, questions, penaltyCount, sessionId, router]
+    [answerState, currentIndex, gameOver, transitioning, questions, penaltyCount, sessionId, router]
   );
 
   if (loading) {
@@ -130,14 +161,14 @@ function GameContent() {
   }
 
   const question = questions[currentIndex];
-  const progress = ((currentIndex) / TOTAL_QUESTIONS) * 100;
+  const progress = (currentIndex / TOTAL_QUESTIONS) * 100;
   const totalPenaltyMs = penaltyCount * PENALTY_MS;
 
   return (
     <div className={`min-h-screen bg-grid px-4 py-6 ${penaltyFlash ? "penalty-flash" : ""}`}>
       <div className="max-w-xl mx-auto space-y-6">
         {/* Top Bar */}
-        <div className="flex items-center justify-between fade-in">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-400">
               <span className="text-white font-bold">{currentIndex + 1}</span>
@@ -165,8 +196,14 @@ function GameContent() {
           />
         </div>
 
-        {/* Question Card */}
-        <div className="glass-card rounded-2xl p-8 text-center space-y-8 scale-in">
+        {/* Question Card — key forces re-mount for consistent animation */}
+        <div
+          key={currentIndex}
+          className={`glass-card rounded-2xl p-8 text-center space-y-8 transition-opacity duration-150 ${
+            transitioning ? "opacity-0 scale-95" : "opacity-100 scale-100"
+          }`}
+          style={{ transition: "opacity 150ms ease, transform 150ms ease" }}
+        >
           {/* Icon Display */}
           <div className="flex items-center justify-center">
             <div className="w-32 h-32 rounded-2xl bg-[#0a0a0f] border border-[#1e1e2e] flex items-center justify-center p-4 glow-orange">
@@ -196,7 +233,7 @@ function GameContent() {
 
               return (
                 <button
-                  key={idx}
+                  key={`${currentIndex}-${idx}`}
                   onClick={() => handleAnswer(idx)}
                   disabled={answerState !== "idle"}
                   className={`${btnClass} disabled:cursor-default`}

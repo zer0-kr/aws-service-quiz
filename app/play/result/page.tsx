@@ -3,14 +3,14 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { formatTime, PENALTY_MS } from "@/lib/utils";
+import { formatTime, PENALTY_MS, TOTAL_QUESTIONS } from "@/lib/utils";
 
 function ResultContent() {
   const searchParams = useSearchParams();
   const time = parseInt(searchParams.get("time") || "0");
   const penalties = parseInt(searchParams.get("penalties") || "0");
+  const correctCount = parseInt(searchParams.get("correct") || String(TOTAL_QUESTIONS - penalties));
   const finalTime = parseInt(searchParams.get("final") || "0");
-
   const penaltyMs = penalties * PENALTY_MS;
   const isPerfect = penalties === 0;
 
@@ -52,7 +52,7 @@ function ResultContent() {
           {/* Stats */}
           <div className="flex justify-center gap-6 text-center">
             <div>
-              <p className="text-2xl font-bold text-green-400">15</p>
+              <p className="text-2xl font-bold text-green-400">{correctCount}</p>
               <p className="text-xs text-gray-500">Correct</p>
             </div>
             <div className="w-px bg-[#1e1e2e]" />

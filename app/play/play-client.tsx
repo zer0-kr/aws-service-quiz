@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { startGame } from "@/app/actions/game";
@@ -31,6 +31,11 @@ export default function PlayClient({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Prefetch game route for faster transition
+  useEffect(() => {
+    router.prefetch("/play/game");
+  }, [router]);
 
   const remainingAttempts = maxAttempts - attempts;
 

@@ -72,26 +72,26 @@ export async function completeGame(
   answers: number[]
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const admin = createAdminClient();
 
+  // Parallel: auth check + session fetch (admin bypasses RLS, validate ownership after)
+  const [userResult, sessionResult] = await Promise.all([
+    supabase.auth.getUser(),
+    admin
+      .from("game_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("status", "playing")
+      .single(),
+  ]);
+
+  const user = userResult.data.user;
   if (!user) {
     return { error: "Not authenticated" };
   }
 
-  const admin = createAdminClient();
-
-  // Get the session
-  const { data: session } = await admin
-    .from("game_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .eq("user_id", user.id)
-    .eq("status", "playing")
-    .single();
-
-  if (!session) {
+  const session = sessionResult.data;
+  if (!session || session.user_id !== user.id) {
     return { error: "Game session not found or already completed" };
   }
 
