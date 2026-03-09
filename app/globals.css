@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #0a0a0f;
+  --color-foreground: #e5e5e5;
+  --color-aws-orange: #ff9900;
+  --color-aws-orange-dark: #cc7a00;
+  --color-aws-orange-light: #ffad33;
+  --color-card: #12121a;
+  --color-card-border: #1e1e2e;
+  --color-card-hover: #1a1a28;
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-space-grotesk);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e1e2e transparent;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Arcade-style grid background */
+.bg-grid {
+  background-image: linear-gradient(
+      rgba(255, 153, 0, 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(255, 153, 0, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Glow effects */
+.glow-orange {
+  box-shadow:
+    0 0 20px rgba(255, 153, 0, 0.15),
+    0 0 60px rgba(255, 153, 0, 0.05);
+}
+
+.glow-orange-strong {
+  box-shadow:
+    0 0 20px rgba(255, 153, 0, 0.3),
+    0 0 60px rgba(255, 153, 0, 0.1),
+    0 0 100px rgba(255, 153, 0, 0.05);
+}
+
+.text-glow-orange {
+  text-shadow:
+    0 0 10px rgba(255, 153, 0, 0.5),
+    0 0 30px rgba(255, 153, 0, 0.2);
+}
+
+/* Glass card */
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(18, 18, 26, 0.8),
+    rgba(18, 18, 26, 0.4)
+  );
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 153, 0, 0.1);
+}
+
+/* Choice button styles */
+.choice-btn {
+  @apply relative overflow-hidden rounded-xl border border-[#1e1e2e] bg-[#12121a] px-6 py-4 text-left transition-all duration-200;
+}
+
+.choice-btn:hover {
+  @apply border-[#ff9900]/30 bg-[#1a1a28];
+  box-shadow: 0 0 15px rgba(255, 153, 0, 0.1);
+}
+
+.choice-btn.correct {
+  @apply border-green-500/50 bg-green-500/10;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.choice-btn.incorrect {
+  @apply border-red-500/50 bg-red-500/10;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* Timer pulse animation */
+@keyframes timer-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.timer-pulse {
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+
+/* Penalty flash */
+@keyframes penalty-flash {
+  0% {
+    background-color: rgba(239, 68, 68, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.penalty-flash {
+  animation: penalty-flash 0.5s ease-out;
+}
+
+/* Progress bar animation */
+@keyframes progress-fill {
+  from {
+    width: 0%;
+  }
+}
+
+.progress-fill {
+  animation: progress-fill 0.3s ease-out;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.4s ease-out;
+}
+
+/* Scale in animation */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.scale-in {
+  animation: scale-in 0.3s ease-out;
+}
+
+/* Rank badge */
+.rank-badge {
+  @apply inline-flex items-center justify-center rounded-full font-bold;
+  min-width: 2rem;
+}
