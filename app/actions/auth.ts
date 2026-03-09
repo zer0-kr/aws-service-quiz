@@ -17,22 +17,23 @@ export async function setNickname(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
+  // Parallel: getUser + check nickname uniqueness (independent queries)
+  const [userResult, existingResult] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("profiles")
+      .select("id")
+      .eq("nickname", nickname.trim())
+      .single(),
+  ]);
+
+  const user = userResult.data.user;
   if (!user) {
     return { error: "Not authenticated" };
   }
 
-  // Check if nickname is taken
-  const { data: existing } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("nickname", nickname.trim())
-    .single();
-
-  if (existing && existing.id !== user.id) {
+  if (existingResult.data && existingResult.data.id !== user.id) {
     return { error: "Nickname is already taken" };
   }
 

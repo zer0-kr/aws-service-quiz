@@ -1,19 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatTime, formatRank } from "@/lib/utils";
 import Link from "next/link";
 import { LeaderboardEntry } from "@/types";
-
 export const revalidate = 30;
 
 export default async function LeaderboardPage() {
   const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { data: rankings } = await supabase
+  // Use admin client for leaderboard query to bypass RLS
+  // (game_sessions RLS requires auth.uid() = user_id, which blocks anon users)
+  const { data: rankings } = await admin
     .from("leaderboard")
     .select("*")
     .order("rank", { ascending: true })
     .limit(50);
-
   const {
     data: { user },
   } = await supabase.auth.getUser();

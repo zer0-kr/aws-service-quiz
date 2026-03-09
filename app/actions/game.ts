@@ -15,41 +15,37 @@ export async function startGame() {
     return { error: "Not authenticated" };
   }
 
-  // Check daily attempts using KST
   const admin = createAdminClient();
 
-  // Get today's date in KST (UTC+9)
+  // Get today's KST boundaries
   const now = new Date();
   const kstOffset = 9 * 60 * 60 * 1000;
   const kstNow = new Date(now.getTime() + kstOffset);
   const kstDateStr = kstNow.toISOString().split("T")[0];
-
-  // Calculate KST midnight boundaries in UTC
   const kstMidnightStart = new Date(`${kstDateStr}T00:00:00+09:00`);
   const kstMidnightEnd = new Date(`${kstDateStr}T23:59:59.999+09:00`);
 
-  const { count } = await admin
-    .from("game_sessions")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("started_at", kstMidnightStart.toISOString())
-    .lte("started_at", kstMidnightEnd.toISOString());
+  // Parallel: check daily limit + abandon old sessions + generate questions (CPU-only)
+  const [attemptsResult, , questions] = await Promise.all([
+    admin
+      .from("game_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("started_at", kstMidnightStart.toISOString())
+      .lte("started_at", kstMidnightEnd.toISOString()),
+    admin
+      .from("game_sessions")
+      .update({ status: "abandoned" })
+      .eq("user_id", user.id)
+      .eq("status", "playing"),
+    Promise.resolve(generateQuestions()),
+  ]);
 
-  if (count !== null && count >= MAX_DAILY_ATTEMPTS) {
+  if (attemptsResult.count !== null && attemptsResult.count >= MAX_DAILY_ATTEMPTS) {
     return { error: "Daily attempt limit reached (3/3)" };
   }
 
-  // Check for abandoned sessions (mark them)
-  await admin
-    .from("game_sessions")
-    .update({ status: "abandoned" })
-    .eq("user_id", user.id)
-    .eq("status", "playing");
-
-  // Generate questions
-  const questions = generateQuestions();
-
-  // Create game session
+  // Insert game session
   const { data: session, error } = await admin
     .from("game_sessions")
     .insert({
