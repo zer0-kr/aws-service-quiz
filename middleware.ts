@@ -25,10 +25,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // Use getSession() instead of getUser() — reads JWT from cookie, no network call.
+  // This is safe for routing decisions; actual verification happens in server actions/components.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
+  const user = session?.user;
   const pathname = request.nextUrl.pathname;
 
   // Public routes that don't require auth
@@ -43,25 +46,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // For authenticated users, do a single profile check when needed
-  if (user && (pathname === "/" || (pathname !== "/setup" && !isPublicRoute))) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("nickname")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile && pathname !== "/setup") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/setup";
-      return NextResponse.redirect(url);
-    }
-
-    if (profile && pathname === "/") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/play";
-      return NextResponse.redirect(url);
-    }
+  // Redirect authenticated users from landing to play
+  // Profile check is handled by /play page itself (avoids extra DB round trip in middleware)
+  if (user && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/play";
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;

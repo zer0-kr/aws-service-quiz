@@ -7,14 +7,17 @@ import { MAX_DAILY_ATTEMPTS, TOTAL_QUESTIONS, PENALTY_MS } from "@/lib/utils";
 
 export async function startGame() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) {
+  // getSession() reads JWT from cookie — no network call. Gives us user.id instantly.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
     return { error: "Not authenticated" };
   }
 
+  const userId = session.user.id;
   const admin = createAdminClient();
 
   // Get today's KST boundaries
@@ -25,31 +28,37 @@ export async function startGame() {
   const kstMidnightStart = new Date(`${kstDateStr}T00:00:00+09:00`);
   const kstMidnightEnd = new Date(`${kstDateStr}T23:59:59.999+09:00`);
 
-  // Parallel: check daily limit + abandon old sessions + generate questions (CPU-only)
-  const [attemptsResult, , questions] = await Promise.all([
+  // ALL queries in parallel: verify token + check daily limit + abandon old + generate questions
+  const [userResult, attemptsResult, , questions] = await Promise.all([
+    supabase.auth.getUser(), // Verify token with auth server
     admin
       .from("game_sessions")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .gte("started_at", kstMidnightStart.toISOString())
       .lte("started_at", kstMidnightEnd.toISOString()),
     admin
       .from("game_sessions")
       .update({ status: "abandoned" })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("status", "playing"),
     Promise.resolve(generateQuestions()),
   ]);
+
+  // Verify token is valid
+  if (!userResult.data.user) {
+    return { error: "Not authenticated" };
+  }
 
   if (attemptsResult.count !== null && attemptsResult.count >= MAX_DAILY_ATTEMPTS) {
     return { error: "Daily attempt limit reached (3/3)" };
   }
 
   // Insert game session
-  const { data: session, error } = await admin
+  const { data: gameSession, error } = await admin
     .from("game_sessions")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       questions,
       status: "playing",
       started_at: new Date().toISOString(),
@@ -64,7 +73,7 @@ export async function startGame() {
     return { error: "Failed to create game session" };
   }
 
-  return { session };
+  return { session: gameSession };
 }
 
 export async function completeGame(
