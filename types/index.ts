@@ -29,6 +29,13 @@ export interface QuizQuestion {
   correctIndex: number;
 }
 
+// Client-safe version — correctIndex stripped to prevent cheating via DevTools
+export interface SafeQuizQuestion {
+  serviceId: string;
+  iconUrl: string;
+  choices: string[];
+}
+
 export interface GameSession {
   id: string;
   user_id: string;

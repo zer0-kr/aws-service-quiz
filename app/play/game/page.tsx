@@ -2,22 +2,24 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { completeGame } from "@/app/actions/game";
+import { completeGame, getGameQuestions, checkAnswer } from "@/app/actions/game";
 import { formatTime, TOTAL_QUESTIONS, PENALTY_MS } from "@/lib/utils";
-import { QuizQuestion } from "@/types";
+import { SafeQuizQuestion } from "@/types";
 
 function GameContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("id");
 
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [questions, setQuestions] = useState<SafeQuizQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [penaltyCount, setPenaltyCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [answerState, setAnswerState] = useState<"idle" | "correct" | "incorrect">("idle");
+  const [answerState, setAnswerState] = useState<
+    "idle" | "checking" | "correct" | "incorrect"
+  >("idle");
+  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [loading, setLoading] = useState(true);
   const [penaltyFlash, setPenaltyFlash] = useState(false);
@@ -36,7 +38,7 @@ function GameContent() {
     img.src = url;
   }, []);
 
-  // Load game session
+  // Load game session via server action (no correctIndex exposed)
   useEffect(() => {
     if (!sessionId) {
       router.push("/play");
@@ -45,25 +47,19 @@ function GameContent() {
 
     async function loadSession() {
       try {
-        const supabase = createClient();
-        const { data: session } = await supabase
-          .from("game_sessions")
-          .select("*")
-          .eq("id", sessionId)
-          .single();
+        const result = await getGameQuestions(sessionId!);
 
-        if (!session || session.status !== "playing") {
+        if (result.error || !result.questions) {
           router.push("/play");
           return;
         }
 
-        const qs = session.questions as QuizQuestion[];
-        setQuestions(qs);
+        setQuestions(result.questions);
         startTimeRef.current = Date.now();
         setLoading(false);
 
         // Preload first 3 question icons
-        qs.slice(0, 3).forEach((q) => preloadImage(q.iconUrl));
+        result.questions.slice(0, 3).forEach((q) => preloadImage(q.iconUrl));
       } catch {
         router.push("/play");
       }
@@ -76,7 +72,11 @@ function GameContent() {
   useEffect(() => {
     if (questions.length === 0) return;
     // Preload next 2 icons ahead
-    for (let i = currentIndex + 1; i <= Math.min(currentIndex + 2, questions.length - 1); i++) {
+    for (
+      let i = currentIndex + 1;
+      i <= Math.min(currentIndex + 2, questions.length - 1);
+      i++
+    ) {
       preloadImage(questions[i].iconUrl);
     }
   }, [currentIndex, questions, preloadImage]);
@@ -103,61 +103,82 @@ function GameContent() {
     (choiceIndex: number) => {
       if (answerState !== "idle" || gameOver || transitioning) return;
 
-      const question = questions[currentIndex];
-      const isCorrect = choiceIndex === question.correctIndex;
-
       setSelectedAnswer(choiceIndex);
+      setAnswerState("checking");
       answersRef.current[currentIndex] = choiceIndex;
 
-      if (isCorrect) {
-        setAnswerState("correct");
-      } else {
-        setAnswerState("incorrect");
-        setPenaltyCount((prev) => prev + 1);
-        setPenaltyFlash(true);
-        setTimeout(() => setPenaltyFlash(false), 500);
-      }
-
-      // Move to next question after delay
-      const delay = isCorrect ? 400 : 800;
-      setTimeout(async () => {
-        const nextIndex = currentIndex + 1;
-
-        if (nextIndex >= TOTAL_QUESTIONS) {
-          // Game over
-          setGameOver(true);
-          if (timerRef.current) clearInterval(timerRef.current);
-
-          const result = await completeGame(
-            sessionId!,
-            answersRef.current
-          );
-
+      // Validate answer server-side
+      (async () => {
+        try {
+          const result = await checkAnswer(sessionId!, currentIndex, choiceIndex);
 
           if (result.error) {
-            setSubmitError(result.error);
+            // On server error, reset to idle so user can retry
+            setAnswerState("idle");
+            setSelectedAnswer(null);
             return;
           }
 
-          if (result.session) {
-            const s = result.session;
-            router.replace(
-              `/play/result?id=${sessionId}&time=${s.total_time_ms}&penalties=${s.penalty_count}&correct=${s.correct_count}&final=${s.final_time_ms}`
-            );
+          const isCorrect = result.correct!;
+          const serverCorrectIndex = result.correctIndex!;
+
+          setCorrectIndex(serverCorrectIndex);
+
+          if (isCorrect) {
+            setAnswerState("correct");
+          } else {
+            setAnswerState("incorrect");
+            setPenaltyCount((prev) => prev + 1);
+            setPenaltyFlash(true);
+            setTimeout(() => setPenaltyFlash(false), 500);
           }
-        } else {
-          // Transition: fade out, swap, fade in
-          setTransitioning(true);
-          setTimeout(() => {
-            setCurrentIndex(nextIndex);
-            setSelectedAnswer(null);
-            setAnswerState("idle");
-            setTransitioning(false);
-          }, 150);
+
+          // Move to next question after delay
+          const delay = isCorrect ? 400 : 800;
+          setTimeout(async () => {
+            const nextIndex = currentIndex + 1;
+
+            if (nextIndex >= TOTAL_QUESTIONS) {
+              // Game over
+              setGameOver(true);
+              if (timerRef.current) clearInterval(timerRef.current);
+
+              const completeResult = await completeGame(
+                sessionId!,
+                answersRef.current
+              );
+
+              if (completeResult.error) {
+                setSubmitError(completeResult.error);
+                return;
+              }
+
+              if (completeResult.session) {
+                const s = completeResult.session;
+                router.replace(
+                  `/play/result?id=${sessionId}&time=${s.total_time_ms}&penalties=${s.penalty_count}&correct=${s.correct_count}&final=${s.final_time_ms}`
+                );
+              }
+            } else {
+              // Transition: fade out, swap, fade in
+              setTransitioning(true);
+              setTimeout(() => {
+                setCurrentIndex(nextIndex);
+                setSelectedAnswer(null);
+                setAnswerState("idle");
+                setCorrectIndex(null);
+                setTransitioning(false);
+              }, 150);
+            }
+          }, delay);
+        } catch {
+          // Network error — reset to idle so user can retry
+          setAnswerState("idle");
+          setSelectedAnswer(null);
         }
-      }, delay);
+      })();
     },
-    [answerState, currentIndex, gameOver, transitioning, questions, sessionId, router]
+    [answerState, currentIndex, gameOver, transitioning, sessionId, router]
   );
 
   if (loading) {
@@ -175,7 +196,9 @@ function GameContent() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="glass-card rounded-2xl p-8 text-center space-y-4 max-w-md">
-          <div className="text-red-400 text-lg font-semibold">Something went wrong</div>
+          <div className="text-red-400 text-lg font-semibold">
+            Something went wrong
+          </div>
           <p className="text-gray-400 text-sm">{submitError}</p>
           <button
             onClick={() => router.push("/play")}
@@ -193,13 +216,17 @@ function GameContent() {
   const totalPenaltyMs = penaltyCount * PENALTY_MS;
 
   return (
-    <div className={`min-h-screen bg-grid px-4 py-6 ${penaltyFlash ? "penalty-flash" : ""}`}>
+    <div
+      className={`min-h-screen bg-grid px-4 py-6 ${penaltyFlash ? "penalty-flash" : ""}`}
+    >
       <div className="max-w-xl mx-auto space-y-6">
         {/* Top Bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-400">
-              <span className="text-white font-bold">{currentIndex + 1}</span>
+              <span className="text-white font-bold">
+                {currentIndex + 1}
+              </span>
               <span className="text-gray-600">/{TOTAL_QUESTIONS}</span>
             </span>
           </div>
@@ -230,7 +257,9 @@ function GameContent() {
           className={`glass-card rounded-2xl p-8 text-center space-y-8 min-h-[420px] transition-opacity duration-150 ${
             transitioning ? "opacity-0 scale-95" : "opacity-100 scale-100"
           }`}
-          style={{ transition: "opacity 150ms ease, transform 150ms ease" }}
+          style={{
+            transition: "opacity 150ms ease, transform 150ms ease",
+          }}
         >
           {/* Icon Display */}
           <div className="flex items-center justify-center">
@@ -251,10 +280,20 @@ function GameContent() {
           <div className="grid grid-cols-1 gap-3">
             {question.choices.map((choice, idx) => {
               let btnClass = "choice-btn";
-              if (answerState !== "idle") {
-                if (idx === question.correctIndex) {
+              if (answerState === "checking") {
+                if (idx === selectedAnswer) {
+                  btnClass += " checking";
+                }
+              } else if (
+                answerState === "correct" ||
+                answerState === "incorrect"
+              ) {
+                if (idx === correctIndex) {
                   btnClass += " correct";
-                } else if (idx === selectedAnswer && answerState === "incorrect") {
+                } else if (
+                  idx === selectedAnswer &&
+                  answerState === "incorrect"
+                ) {
                   btnClass += " incorrect";
                 }
               }

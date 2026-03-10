@@ -76,6 +76,79 @@ export async function startGame() {
   return { session: gameSession };
 }
 
+export async function getGameQuestions(sessionId: string) {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    return { error: "Not authenticated" };
+  }
+
+  const admin = createAdminClient();
+  const { data: gameSession } = await admin
+    .from("game_sessions")
+    .select("questions, user_id, status")
+    .eq("id", sessionId)
+    .single();
+
+  if (!gameSession || gameSession.user_id !== session.user.id || gameSession.status !== "playing") {
+    return { error: "Game session not found" };
+  }
+
+  // Strip correctIndex — client must never see answers
+  const safeQuestions = (gameSession.questions as { serviceId: string; iconUrl: string; choices: string[] }[]).map((q) => ({
+    serviceId: q.serviceId,
+    iconUrl: q.iconUrl,
+    choices: q.choices,
+  }));
+
+  return { questions: safeQuestions };
+}
+
+export async function checkAnswer(
+  sessionId: string,
+  questionIndex: number,
+  choiceIndex: number
+) {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    return { error: "Not authenticated" };
+  }
+
+  if (
+    typeof questionIndex !== "number" ||
+    questionIndex < 0 ||
+    questionIndex >= TOTAL_QUESTIONS ||
+    typeof choiceIndex !== "number" ||
+    choiceIndex < 0 ||
+    choiceIndex > 3
+  ) {
+    return { error: "Invalid input" };
+  }
+
+  const admin = createAdminClient();
+  const { data: gameSession } = await admin
+    .from("game_sessions")
+    .select("questions, user_id, status")
+    .eq("id", sessionId)
+    .single();
+
+  if (!gameSession || gameSession.user_id !== session.user.id || gameSession.status !== "playing") {
+    return { error: "Game session not found" };
+  }
+
+  const questions = gameSession.questions as { correctIndex: number }[];
+  const correct = choiceIndex === questions[questionIndex].correctIndex;
+
+  return { correct, correctIndex: questions[questionIndex].correctIndex };
+}
+
 export async function completeGame(
   sessionId: string,
   answers: number[]
